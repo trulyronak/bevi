@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Bevi Quick Dispense</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a1628;
+      color: #fff;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .status-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #8899aa;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ff4444;
+      transition: background 0.3s;
+    }
+    .status-dot.connected { background: #44ff66; }
+    .status-dot.connecting { background: #ffaa00; animation: pulse 1s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Scanner screen */
+    .screen { display: none; flex-direction: column; align-items: center; width: 100%; height: 100%; }
+    .screen.active { display: flex; }
+
+    #scanScreen {
+      justify-content: center;
+      gap: 24px;
+      padding: 20px;
+    }
+    #scanScreen h2 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #5588bb;
+      letter-spacing: 1px;
+    }
+    #scanScreen p {
+      font-size: 13px;
+      color: #556677;
+      text-align: center;
+    }
+    #qr-reader {
+      width: min(300px, 80vw);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    #qr-reader video { border-radius: 12px; }
+    /* hide the built-in UI clutter */
+    #qr-reader__dashboard { display: none !important; }
+    #qr-reader__scan_region { border: none !important; }
+    #qr-reader__scan_region img { display: none !important; }
+
+    #dispenseScreen {
+      justify-content: center;
+      align-items: center;
+    }
+
+    .main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 32px;
+    }
+
+    .water-label {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: #5588bb;
+    }
+
+    .btn-dispense {
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      border: 4px solid #1a3a5c;
+      background: radial-gradient(circle at 30% 30%, #1a3a5c, #0d1f35);
+      color: #5588bb;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-dispense:active { transform: scale(0.96); }
+    .btn-dispense.dispensing {
+      border-color: #246eff;
+      background: radial-gradient(circle at 30% 30%, #1a3a6c, #0d2045);
+      color: #fff;
+      box-shadow: 0 0 40px rgba(36, 110, 255, 0.3), inset 0 0 30px rgba(36, 110, 255, 0.1);
+    }
+    .btn-dispense.dispensing .ring {
+      opacity: 1;
+      animation: spin 2s linear infinite;
+    }
+    .ring {
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 3px solid transparent;
+      border-top-color: #246eff;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .btn-dispense:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .btn-rescan {
+      margin-top: 32px;
+      padding: 10px 24px;
+      border: 1px solid #1a3a5c;
+      border-radius: 8px;
+      background: transparent;
+      color: #5588bb;
+      font-size: 13px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-rescan:active { opacity: 0.6; }
+
+    .error-msg {
+      position: absolute;
+      bottom: 80px;
+      font-size: 14px;
+      color: #ff6666;
+      text-align: center;
+      padding: 0 24px;
+    }
+
+    .footer {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 16px;
+      text-align: center;
+      font-size: 11px;
+      color: #334455;
+    }
+  </style>
+</head>
+<body>
+  <div class="status-bar">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">Scan QR code</span>
+  </div>
+
+  <!-- Scanner Screen -->
+  <div class="screen active" id="scanScreen">
+    <h2>Scan Bevi QR Code</h2>
+    <div id="qr-reader"></div>
+    <p>Point your camera at the QR code on the Bevi machine</p>
+  </div>
+
+  <!-- Dispense Screen -->
+  <div class="screen" id="dispenseScreen">
+    <div class="main">
+      <div class="water-label">Water</div>
+      <button class="btn-dispense" id="dispenseBtn" disabled>
+        <div class="ring"></div>
+        <span id="btnText">DISPENSE</span>
+      </button>
+    </div>
+    <button class="btn-rescan" id="rescanBtn">Scan New QR</button>
+  </div>
+
+  <div class="error-msg" id="errorMsg"></div>
+  <div class="footer">Bevi Quick Dispense</div>
+
+  <script>
+    const btn = document.getElementById('dispenseBtn');
+    const btnText = document.getElementById('btnText');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const errorMsg = document.getElementById('errorMsg');
+    const scanScreen = document.getElementById('scanScreen');
+    const dispenseScreen = document.getElementById('dispenseScreen');
+    const rescanBtn = document.getElementById('rescanBtn');
+
+    let ws = null;
+    let dispensing = false;
+    let connected = false;
+    let tabletId = '';
+    let token = '';
+    let scanner = null;
+    let dispenseInterval = null;
+
+    // Parse tabletId/token from a Bevi URL
+    // e.g. http://bevitouchless.co/touchless/rey/5119c5e8c7040e62/ZzmxJgIqTO2jAFV28j3Y9g==
+    function parseBeviUrl(url) {
+      try {
+        const u = new URL(url);
+        const segments = u.pathname.split('/').filter(Boolean);
+        // segments: ["touchless", "rey", tabletId, token]
+        if (segments.length >= 2) {
+          return { tabletId: segments[segments.length - 2], token: segments[segments.length - 1] };
+        }
+      } catch {}
+      return null;
+    }
+
+    // Also check our own query params
+    function parseOwnUrl() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tabletId') && params.get('token')) {
+        return { tabletId: params.get('tabletId'), token: params.get('token') };
+      }
+      const segments = window.location.pathname.split('/').filter(Boolean);
+      if (segments.length >= 2) {
+        return { tabletId: segments[segments.length - 2], token: segments[segments.length - 1] };
+      }
+      return null;
+    }
+
+    function showScreen(name) {
+      scanScreen.classList.toggle('active', name === 'scan');
+      dispenseScreen.classList.toggle('active', name === 'dispense');
+    }
+
+    function setStatus(state, text) {
+      statusDot.className = 'status-dot ' + state;
+      statusText.textContent = text;
+    }
+
+    function setError(msg) {
+      errorMsg.textContent = msg || '';
+    }
+
+    function getDeviceId() {
+      const key = 'bevi.touchless.deviceid';
+      let id = localStorage.getItem(key);
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem(key, id);
+      }
+      return id;
+    }
+
+    function send(msg) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+      }
+    }
+
+    function connect() {
+      if (ws) { ws.close(); ws = null; }
+
+      setStatus('connecting', 'Connecting...');
+      setError('');
+      showScreen('dispense');
+
+      const wsUrl = `wss://bevitouchless.co/user-side/${tabletId}/${token}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        connected = true;
+        setStatus('connected', 'Connected');
+        btn.disabled = false;
+        send({ cmd: 'hash', value: getDeviceId() });
+      };
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        console.log('WS recv:', msg);
+        if (msg.cmd === 'ping') {
+          send({ cmd: 'pong', value: msg.value });
+        } else if (msg.cmd === 'ack' && msg.value === 'register') {
+          setStatus('connected', 'Ready');
+        } else if (msg.cmd === 'error') {
+          setError('Server error. Try scanning again.');
+          ws.close();
+        } else if (msg.cmd === 'unregister') {
+          setError(msg.reason || 'Session ended.');
+          stopDispensing();
+          ws.close();
+        }
+      };
+
+      ws.onclose = (event) => {
+        connected = false;
+        btn.disabled = true;
+        stopDispensing();
+
+        const reason = (event.reason || '').toLowerCase();
+        if (reason.includes('timeout') || reason.includes('bevi_timeout')) {
+          setStatus('', 'Session timed out');
+          setError('Session timed out. Scan a new QR code.');
+        } else {
+          setStatus('', 'Disconnected');
+          if (event.code !== 1000 && event.code !== 3002) {
+            setTimeout(connect, 2000);
+          }
+        }
+      };
+
+      ws.onerror = () => {
+        setError('Connection error. Retrying...');
+      };
+    }
+
+    function startDispensing() {
+      if (!connected || dispensing) return;
+      dispensing = true;
+      btn.classList.add('dispensing');
+      btnText.textContent = 'STOP';
+      send({ cmd: 'dispense', value: true, position: 0 });
+      // Machine stops if it doesn't keep receiving dispense commands (original app uses 900ms)
+      dispenseInterval = setInterval(() => {
+        if (dispensing && connected) {
+          console.log('Sending keepalive dispense');
+          send({ cmd: 'dispense', value: true, position: 0 });
+        }
+      }, 800);
+    }
+
+    function stopDispensing() {
+      if (dispenseInterval) { clearInterval(dispenseInterval); dispenseInterval = null; }
+      if (!dispensing) return;
+      dispensing = false;
+      btn.classList.remove('dispensing');
+      btnText.textContent = 'DISPENSE';
+      send({ cmd: 'dispense', value: false, position: 0 });
+      send({ cmd: 'noop' });
+    }
+
+    btn.addEventListener('click', () => {
+      dispensing ? stopDispensing() : startDispensing();
+    });
+
+    btn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      btn.click();
+    });
+
+    // QR Scanner
+    function startScanner() {
+      if (ws) { ws.close(); ws = null; }
+      connected = false;
+      dispensing = false;
+      btn.disabled = true;
+      btn.classList.remove('dispensing');
+      btnText.textContent = 'DISPENSE';
+      setError('');
+      setStatus('', 'Scan QR code');
+      showScreen('scan');
+
+      scanner = new Html5Qrcode('qr-reader');
+      scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+          const parsed = parseBeviUrl(decodedText);
+          if (parsed) {
+            tabletId = parsed.tabletId;
+            token = parsed.token;
+            scanner.stop().then(() => { scanner = null; }).catch(() => {});
+            connect();
+          }
+        },
+        () => {} // ignore scan failures
+      ).catch((err) => {
+        setError('Camera access denied. Grant permission and reload.');
+      });
+    }
+
+    rescanBtn.addEventListener('click', () => {
+      if (ws) { ws.close(); ws = null; }
+      startScanner();
+    });
+
+    // Init: if URL already has credentials, connect directly; otherwise show scanner
+    const existing = parseOwnUrl();
+    if (existing) {
+      tabletId = existing.tabletId;
+      token = existing.token;
+      connect();
+    } else {
+      startScanner();
+    }
+  </script>
+</body>
+</html>
