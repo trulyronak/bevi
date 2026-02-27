@@ -176,6 +176,88 @@
       font-size: 11px;
       color: #334455;
     }
+
+    /* Help */
+    .help-btn {
+      position: absolute;
+      top: 10px;
+      right: 14px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 1.5px solid #1a3a5c;
+      background: transparent;
+      color: #5588bb;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      z-index: 10;
+    }
+    .help-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 10, 20, 0.92);
+      z-index: 100;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 24px;
+    }
+    .help-overlay.active { display: flex; }
+    .help-card {
+      max-width: 360px;
+      width: 100%;
+    }
+    .help-card h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 20px;
+    }
+    .help-steps {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .help-steps li {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #1a3a5c;
+      color: #5588bb;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .step-text {
+      font-size: 14px;
+      line-height: 1.5;
+      color: #99aabb;
+      padding-top: 3px;
+    }
+    .step-text strong { color: #ccddeee0; }
+    .help-close {
+      margin-top: 28px;
+      padding: 10px 32px;
+      border: 1px solid #1a3a5c;
+      border-radius: 8px;
+      background: transparent;
+      color: #5588bb;
+      font-size: 14px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
   </style>
 </head>
 <body>
@@ -203,6 +285,38 @@
     <button class="btn-rescan" id="rescanBtn">Scan New QR</button>
   </div>
 
+  <button class="help-btn" id="helpBtn">?</button>
+
+  <div class="help-overlay" id="helpOverlay">
+    <div class="help-card">
+      <h2>How to Use</h2>
+      <ol class="help-steps">
+        <li>
+          <span class="step-num">1</span>
+          <span class="step-text">Walk up to your <strong>Bevi machine</strong> and find the <strong>QR code</strong> on its touchscreen.</span>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <span class="step-text"><strong>Scan the QR code</strong> with this app. Allow camera access when prompted.</span>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <span class="step-text">Wait for the status to show <strong>Ready</strong>, then tap <strong>DISPENSE</strong> to start the water.</span>
+        </li>
+        <li>
+          <span class="step-num">4</span>
+          <span class="step-text">Tap <strong>STOP</strong> when your bottle is full. No need to hold anything down.</span>
+        </li>
+      </ol>
+      <div style="margin-top: 24px; font-size: 12px; color: #445566; line-height: 1.6;">
+        <strong style="color: #6688aa;">Tips:</strong> QR codes expire after a few minutes. If you get disconnected, just tap <strong style="color: #99aabb;">Scan New QR</strong> and scan again. Sessions also time out after ~75s of inactivity.
+      </div>
+      <div style="text-align: center;">
+        <button class="help-close" id="helpClose">Got it</button>
+      </div>
+    </div>
+  </div>
+
   <div class="error-msg" id="errorMsg"></div>
   <div class="footer">Bevi Quick Dispense</div>
 
@@ -215,6 +329,13 @@
     const scanScreen = document.getElementById('scanScreen');
     const dispenseScreen = document.getElementById('dispenseScreen');
     const rescanBtn = document.getElementById('rescanBtn');
+    const helpBtn = document.getElementById('helpBtn');
+    const helpOverlay = document.getElementById('helpOverlay');
+    const helpClose = document.getElementById('helpClose');
+
+    helpBtn.addEventListener('click', () => helpOverlay.classList.add('active'));
+    helpClose.addEventListener('click', () => helpOverlay.classList.remove('active'));
+    helpOverlay.addEventListener('click', (e) => { if (e.target === helpOverlay) helpOverlay.classList.remove('active'); });
 
     let ws = null;
     let dispensing = false;
